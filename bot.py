@@ -9,7 +9,7 @@ from pathlib import Path
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import FSInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 from utils.audio_metadata import clean_audio, set_audio_metadata
 from utils.video_metadata import clean_video, set_video_metadata
@@ -47,51 +47,52 @@ def get_file_size(filepath):
     return os.path.getsize(filepath)
 
 
-def main_menu_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎵 Уникализировать музыку", callback_data="select_audio")],
-        [InlineKeyboardButton(text="🎬 Уникализировать видео", callback_data="select_video")],
-        [InlineKeyboardButton(text="🖼 Уникализировать картинку", callback_data="select_image")],
-        [InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
-    ])
+def main_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎵 Уникализировать музыку")],
+            [KeyboardButton(text="🎬 Уникализировать видео")],
+            [KeyboardButton(text="🖼 Уникализировать картинку")],
+            [KeyboardButton(text="❓ Помощь")],
+        ],
+        resize_keyboard=True
+    )
 
 
-def file_action_kb(filetype):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🧹 Очистить метаданные", callback_data=f"do_clean_{filetype}")],
-        [InlineKeyboardButton(text="✏️ Установить свои данные", callback_data=f"do_set_all_{filetype}")],
-        [InlineKeyboardButton(text="🔄 Другой файл", callback_data="back")],
-    ])
+def action_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🧹 Очистить метаданные")],
+            [KeyboardButton(text="✏️ Установить свои данные")],
+            [KeyboardButton(text="⬅️ Назад")],
+        ],
+        resize_keyboard=True
+    )
 
 
 def meta_kb(action, saved):
     buttons = []
     if 'author' not in saved:
-        buttons.append([InlineKeyboardButton(text="👤 Имя автора", callback_data=f"input_author_{action}")])
+        buttons.append([KeyboardButton(text="👤 Имя автора")])
     if 'title' not in saved:
-        buttons.append([InlineKeyboardButton(text="📝 Название", callback_data=f"input_title_{action}")])
+        buttons.append([KeyboardButton(text="📝 Название")])
     if 'album' not in saved and action == 'audio':
-        buttons.append([InlineKeyboardButton(text="💿 Альбом", callback_data=f"input_album_{action}")])
-
+        buttons.append([KeyboardButton(text="💿 Альбом")])
     if saved:
-        buttons.append([InlineKeyboardButton(text="✅ Применить", callback_data=f"finish_set_{action}")])
-        buttons.append([InlineKeyboardButton(text="🗑 Сбросить", callback_data=f"do_clean_{action}")])
-
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+        buttons.append([KeyboardButton(text="✅ Применить")])
+        buttons.append([KeyboardButton(text="🗑 Сбросить")])
+    buttons.append([KeyboardButton(text="⬅️ Назад")])
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 
 def done_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Ещё файл", callback_data="back")],
-        [InlineKeyboardButton(text="🏠 В меню", callback_data="home")],
-    ])
-
-
-def file_size_warn_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back")],
-    ])
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔄 Ещё файл")],
+            [KeyboardButton(text="🏠 В меню")],
+        ],
+        resize_keyboard=True
+    )
 
 
 async def send_result(user_id, result_path, caption):
@@ -101,7 +102,7 @@ async def send_result(user_id, result_path, caption):
         await bot.send_message(
             user_id,
             f"❌ Файл слишком большой ({size // 1024 // 1024}MB). Лимит Telegram — 50MB.",
-            reply_markup=file_size_warn_kb()
+            reply_markup=main_kb()
         )
         return
 
@@ -117,148 +118,14 @@ async def cmd_start(message: types.Message):
     await message.reply(
         "Привет! Я бот для уникализации файлов.\n\n"
         "Как это работает:\n"
-        "1. Отправь файл (музыку, видео или картинку)\n"
-        "2. Бот определит тип автоматически\n"
-        "3. Нажми кнопку нужного действия\n"
+        "1. Выбери тип файла на клавиатуре ниже\n"
+        "2. Отправь файл\n"
+        "3. Выбери действие\n"
         "4. Получи обработанный файл\n\n"
-        "Кнопки:\n"
-        "🧹 Очистить — удалит все старые метаданные\n"
-        "✏️ Установить — пропишет имя и название\n\n"
         "Поддержка: mp3, wav, flac, ogg, m4a, mp4, webm, avi, mov, jpg, jpeg, png, webp\n"
-        "Лимит файла: 50MB\n\n"
-        "Выбери действие или сразу отправь файл:",
-        reply_markup=main_menu_kb()
+        "Лимит файла: 50MB",
+        reply_markup=main_kb()
     )
-
-
-@dp.callback_query(F.data.in_({"home", "back"}))
-async def cb_home(callback: CallbackQuery):
-    user_data[callback.from_user.id] = {}
-    await callback.message.edit_text(
-        "Отправь файл или выбери тип:",
-        reply_markup=main_menu_kb()
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "help")
-async def cb_help(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "📋 Помощь\n\n"
-        "1. Отправь файл (музыку, видео или картинку)\n"
-        "2. Бот определит тип автоматически\n"
-        "3. Выбери действие:\n"
-        "   🧹 Очистить — удалит все метаданные\n"
-        "   ✏️ Установить — пропишет твои данные\n\n"
-        "Форматы:\n"
-        "🎵 mp3, wav, flac, ogg, m4a\n"
-        "🎬 mp4, webm, avi, mov\n"
-        "🖼 jpg, jpeg, png, webp\n\n"
-        "Лимит: 50MB",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back")]
-        ])
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("select_"))
-async def cb_select(callback: CallbackQuery):
-    action = callback.data.replace("select_", "")
-    user_id = callback.from_user.id
-    user_data[user_id] = user_data.get(user_id, {})
-    user_data[user_id]['waiting_type'] = action
-
-    labels = {"audio": "🎵 Музыка", "video": "🎬 Видео", "image": "🖼 Картинка"}
-    await callback.message.edit_text(
-        f"{labels[action]}\n\nОтправь файл:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back")]
-        ])
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("do_clean_"))
-async def cb_do_clean(callback: CallbackQuery):
-    action = callback.data.replace("do_clean_", "")
-    user_id = callback.from_user.id
-
-    if user_id not in user_data or 'file' not in user_data[user_id]:
-        await callback.answer("⚠️ Сначала отправь файл!", show_alert=True)
-        return
-
-    file_path = user_data[user_id]['file']
-    logger.info(f"Cleaning file: {file_path}")
-    await callback.message.edit_text("⏳ Очищаю метаданные...")
-    await callback.answer()
-
-    try:
-        result = await process_file(file_path, clean=True)
-        if result:
-            await send_result(user_id, result, "✅ Метаданные очищены!")
-        else:
-            await bot.send_message(user_id, "❌ Не удалось обработать файл", reply_markup=done_kb())
-    except Exception as e:
-        logger.exception(f"Clean error: {e}")
-        await bot.send_message(user_id, f"❌ Ошибка: {e}", reply_markup=done_kb())
-
-
-@dp.callback_query(F.data.startswith("do_set_all_"))
-async def cb_do_set_all(callback: CallbackQuery):
-    action = callback.data.replace("do_set_all_", "")
-    user_id = callback.from_user.id
-
-    if user_id not in user_data or 'file' not in user_data[user_id]:
-        await callback.answer("⚠️ Сначала отправь файл!", show_alert=True)
-        return
-
-    user_data[user_id]['meta'] = {}
-    user_data[user_id]['current_action'] = action
-    kb = meta_kb(action, {})
-    await callback.message.edit_text("Настрой метаданные:\nВыбери поле:", reply_markup=kb)
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("input_"))
-async def cb_input(callback: CallbackQuery):
-    parts = callback.data.split("_")
-    field = parts[1]
-    action = parts[2]
-    user_id = callback.from_user.id
-
-    user_data[user_id]['waiting_for'] = field
-    user_data[user_id]['current_action'] = action
-
-    labels = {'author': '👤 имя автора', 'title': '📝 название', 'album': '💿 альбом'}
-    await callback.message.edit_text(f"Введи {labels[field]}:")
-    await callback.answer()
-
-
-@dp.callback_query(F.data.startswith("finish_set_"))
-async def cb_finish_set(callback: CallbackQuery):
-    action = callback.data.replace("finish_set_", "")
-    user_id = callback.from_user.id
-
-    meta = user_data.get(user_id, {}).get('meta', {})
-    if not meta:
-        await callback.answer("⚠️ Укажи хотя бы одно поле!", show_alert=True)
-        return
-
-    file_path = user_data[user_id]['file']
-    logger.info(f"Setting metadata on {file_path}: {meta}")
-    await callback.message.edit_text("⏳ Сохраняю...")
-    await callback.answer()
-
-    try:
-        result = await process_file(file_path, metadata=meta)
-        if result:
-            await send_result(user_id, result, "✅ Метаданные обновлены!")
-        else:
-            await bot.send_message(user_id, "❌ Не удалось обработать файл", reply_markup=done_kb())
-    except Exception as e:
-        logger.exception(f"Set metadata error: {e}")
-        await bot.send_message(user_id, f"❌ Ошибка: {e}", reply_markup=done_kb())
 
 
 @dp.message(F.document | F.video | F.photo)
@@ -286,7 +153,7 @@ async def handle_file(message: types.Message):
     if file_size > MAX_FILE_SIZE:
         await message.reply(
             f"❌ Файл слишком большой ({file_size // 1024 // 1024}MB). Лимит 50MB.",
-            reply_markup=main_menu_kb()
+            reply_markup=main_kb()
         )
         return
 
@@ -310,32 +177,161 @@ async def handle_file(message: types.Message):
         type_labels = {'audio': '🎵 Музыка', 'video': '🎬 Видео', 'image': '🖼 Картинка'}
         await message.reply(
             f"✅ Файл: {file_name}\nТип: {type_labels[detected_type]}\n\nЧто сделать?",
-            reply_markup=file_action_kb(detected_type)
+            reply_markup=action_kb()
         )
     else:
         await message.reply(
             f"✅ Файл: {file_name}\n\nВыбери действие:",
-            reply_markup=main_menu_kb()
+            reply_markup=main_kb()
         )
 
 
-@dp.message()
+@dp.message(F.text)
 async def handle_text(message: types.Message):
     user_id = message.from_user.id
-    waiting_for = user_data.get(user_id, {}).get('waiting_for')
+    text = message.text
+    state = user_data.get(user_id, {})
 
-    if not waiting_for:
-        await message.reply("Отправь файл или выбери действие:", reply_markup=main_menu_kb())
+    if state.get('waiting_for'):
+        field = state['waiting_for']
+        action = state.get('current_action', 'audio')
+
+        user_data[user_id]['meta'] = user_data[user_id].get('meta', {})
+        user_data[user_id]['meta'][field] = text
+        user_data[user_id]['waiting_for'] = None
+
+        saved = user_data[user_id].get('meta', {})
+        labels = {'author': '👤 Имя автора', 'title': '📝 Название', 'album': '💿 Альбом'}
+        summary = '\n'.join(f"  {labels.get(k, k)}: {v}" for k, v in saved.items())
+        await message.answer(
+            f"✅ {labels.get(field, field)}: {text}\n\nУже сохранено:\n{summary}\n\nНастрой ещё или нажми «Применить»:",
+            reply_markup=meta_kb(action, saved)
+        )
         return
 
-    user_data[user_id]['meta'] = user_data[user_id].get('meta', {})
-    user_data[user_id]['meta'][waiting_for] = message.text
-    user_data[user_id]['waiting_for'] = None
-    action = user_data[user_id].get('current_action', 'audio')
-    saved = user_data[user_id].get('meta', {})
+    if text == "🏠 В меню":
+        user_data[user_id] = {}
+        await message.answer("Главное меню:", reply_markup=main_kb())
 
-    kb = meta_kb(action, saved)
-    await message.reply(f"✅ {message.text}\n\nНастрой ещё:", reply_markup=kb)
+    elif text == "⬅️ Назад":
+        user_data[user_id] = {}
+        await message.answer("Выбери действие:", reply_markup=main_kb())
+
+    elif text == "🎵 Уникализировать музыку":
+        user_data[user_id] = {'waiting_type': 'audio'}
+        await message.answer("🎵 Музыка\n\nОтправь аудиофайл:", reply_markup=ReplyKeyboardRemove())
+
+    elif text == "🎬 Уникализировать видео":
+        user_data[user_id] = {'waiting_type': 'video'}
+        await message.answer("🎬 Видео\n\nОтправь видеофайл:", reply_markup=ReplyKeyboardRemove())
+
+    elif text == "🖼 Уникализировать картинку":
+        user_data[user_id] = {'waiting_type': 'image'}
+        await message.answer("🖼 Картинка\n\nОтправь картинку:", reply_markup=ReplyKeyboardRemove())
+
+    elif text == "❓ Помощь":
+        await message.answer(
+            "📋 Помощь\n\n"
+            "1. Выбери тип файла на клавиатуре\n"
+            "2. Отправь файл\n"
+            "3. Выбери действие:\n"
+            "   🧹 Очистить — удалит все метаданные\n"
+            "   ✏️ Установить — пропишет твои данные\n\n"
+            "Форматы:\n"
+            "🎵 mp3, wav, flac, ogg, m4a\n"
+            "🎬 mp4, webm, avi, mov\n"
+            "🖼 jpg, jpeg, png, webp\n\n"
+            "Лимит: 50MB",
+            reply_markup=main_kb()
+        )
+
+    elif text == "🧹 Очистить метаданные":
+        if 'file' not in state:
+            await message.answer("⚠️ Сначала отправь файл!", reply_markup=main_kb())
+            return
+
+        file_path = state['file']
+        logger.info(f"Cleaning file: {file_path}")
+        await message.answer("⏳ Очищаю метаданные...")
+
+        try:
+            result = await process_file(file_path, clean=True)
+            if result:
+                await send_result(user_id, result, "✅ Метаданные очищены!")
+            else:
+                await bot.send_message(user_id, "❌ Не удалось обработать файл", reply_markup=done_kb())
+        except Exception as e:
+            logger.exception(f"Clean error: {e}")
+            await bot.send_message(user_id, f"❌ Ошибка: {e}", reply_markup=done_kb())
+
+    elif text == "✏️ Установить свои данные":
+        if 'file' not in state:
+            await message.answer("⚠️ Сначала отправь файл!", reply_markup=main_kb())
+            return
+
+        action = state.get('current_action', 'audio')
+        user_data[user_id]['meta'] = {}
+        user_data[user_id]['current_action'] = action
+        await message.answer("Настрой метаданные:\nВыбери поле:", reply_markup=meta_kb(action, {}))
+
+    elif text == "👤 Имя автора":
+        user_data[user_id]['waiting_for'] = 'author'
+        await message.answer("Введи имя автора:", reply_markup=ReplyKeyboardRemove())
+
+    elif text == "📝 Название":
+        user_data[user_id]['waiting_for'] = 'title'
+        await message.answer("Введи название:", reply_markup=ReplyKeyboardRemove())
+
+    elif text == "💿 Альбом":
+        user_data[user_id]['waiting_for'] = 'album'
+        await message.answer("Введи альбом:", reply_markup=ReplyKeyboardRemove())
+
+    elif text == "✅ Применить":
+        meta = state.get('meta', {})
+        if not meta:
+            await message.answer("⚠️ Укажи хотя бы одно поле!")
+            return
+
+        file_path = state.get('file')
+        logger.info(f"Setting metadata on {file_path}: {meta}")
+        await message.answer("⏳ Сохраняю...")
+
+        try:
+            result = await process_file(file_path, metadata=meta)
+            if result:
+                await send_result(user_id, result, "✅ Метаданные обновлены!")
+            else:
+                await bot.send_message(user_id, "❌ Не удалось обработать файл", reply_markup=done_kb())
+        except Exception as e:
+            logger.exception(f"Set metadata error: {e}")
+            await bot.send_message(user_id, f"❌ Ошибка: {e}", reply_markup=done_kb())
+
+    elif text == "🗑 Сбросить":
+        file_path = state.get('file')
+        if not file_path:
+            await message.answer("⚠️ Сначала отправь файл!", reply_markup=main_kb())
+            return
+
+        user_data[user_id]['meta'] = {}
+        logger.info(f"Cleaning file after reset: {file_path}")
+        await message.answer("⏳ Очищаю метаданные...")
+
+        try:
+            result = await process_file(file_path, clean=True)
+            if result:
+                await send_result(user_id, result, "✅ Метаданные очищены!")
+            else:
+                await bot.send_message(user_id, "❌ Не удалось обработать файл", reply_markup=done_kb())
+        except Exception as e:
+            logger.exception(f"Clean error: {e}")
+            await bot.send_message(user_id, f"❌ Ошибка: {e}", reply_markup=done_kb())
+
+    elif text == "🔄 Ещё файл":
+        user_data[user_id] = {}
+        await message.answer("Отправь файл или выбери тип:", reply_markup=main_kb())
+
+    else:
+        await message.answer("Выбери действие:", reply_markup=main_kb())
 
 
 async def process_file(file_path: str, clean=False, metadata=None):

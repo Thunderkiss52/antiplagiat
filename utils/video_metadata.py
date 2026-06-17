@@ -1,26 +1,47 @@
 """Video metadata handling using ffmpeg."""
 import subprocess
-import shutil
 
 
 def clean_video(input_path: str, output_path: str):
     cmd = [
-        'ffmpeg', '-i', input_path,
+        'ffmpeg', '-y', '-i', input_path,
         '-map_metadata', '-1',
         '-c:v', 'copy', '-c:a', 'copy',
-        output_path, '-y'
+        '-map', '0',
+        output_path
     ]
-    subprocess.run(cmd, capture_output=True, check=True)
+    result = subprocess.run(cmd, capture_output=True)
+    if result.returncode != 0:
+        cmd = [
+            'ffmpeg', '-y', '-i', input_path,
+            '-map_metadata', '-1',
+            '-c:v', 'libx264', '-crf', '18', '-preset', 'slow',
+            '-c:a', 'aac', '-b:a', '192k',
+            '-map', '0',
+            output_path
+        ]
+        subprocess.run(cmd, capture_output=True, check=True)
 
 
 def set_video_metadata(input_path: str, output_path: str, metadata: dict):
-    cmd = ['ffmpeg', '-i', input_path]
-
+    meta_args = []
     for key, value in metadata.items():
         if key == 'author':
-            cmd.extend(['-metadata', f'artist={value}'])
+            meta_args.extend(['-metadata', f'artist={value}'])
         elif key == 'title':
-            cmd.extend(['-metadata', f'title={value}'])
+            meta_args.extend(['-metadata', f'title={value}'])
 
-    cmd.extend(['-c:v', 'copy', '-c:a', 'copy', output_path, '-y'])
-    subprocess.run(cmd, capture_output=True, check=True)
+    cmd = ['ffmpeg', '-y', '-i', input_path] + meta_args + [
+        '-c:v', 'copy', '-c:a', 'copy',
+        '-map', '0',
+        output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True)
+    if result.returncode != 0:
+        cmd = ['ffmpeg', '-y', '-i', input_path] + meta_args + [
+            '-c:v', 'libx264', '-crf', '18', '-preset', 'slow',
+            '-c:a', 'aac', '-b:a', '192k',
+            '-map', '0',
+            output_path
+        ]
+        subprocess.run(cmd, capture_output=True, check=True)
