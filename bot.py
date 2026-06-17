@@ -105,7 +105,8 @@ async def send_result(user_id, result_path, caption):
         )
         return
 
-    await bot.send_document(user_id, FSInputFile(result_path), caption=caption)
+    original_name = user_data.get(user_id, {}).get('name', Path(result_path).name)
+    await bot.send_document(user_id, FSInputFile(result_path, filename=original_name), caption=caption)
     os.remove(result_path)
     await bot.send_message(user_id, "Что дальше?", reply_markup=done_kb())
 
